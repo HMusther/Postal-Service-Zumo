@@ -5,9 +5,6 @@ backs up and turns. */
 #include <Wire.h>
 #include <Zumo32U4.h>
 
-
-
-
 // This might need to be tuned for different lighting conditions,
 // surfaces, etc.
 #define QTR_THRESHOLD     1000  // microseconds
@@ -19,15 +16,24 @@ backs up and turns. */
 #define REVERSE_DURATION  200  // ms
 #define TURN_DURATION     300  // ms
 
-int wallBounceCount = 0;
-bool isStuck = false;
-
-
+enum Status {
+  Searching = 0,
+  Returning = 1
+};
 enum sensors {
   Left = 0,
   Right = 4
 };
 
+// Storing L (Left) F (Forward) R (Right) U (Turn Around)
+char movements[1000];
+int movementIndex = 0;
+
+int wallBounceCount = 0;
+int bounceCount = 0;
+
+bool isStuck = false;
+Status status = Searching;
 
 // Change next line to this if you are using the older Zumo 32U4
 // with a black and green LCD display:
@@ -38,8 +44,8 @@ Zumo32U4ButtonA buttonA;
 Zumo32U4Buzzer buzzer;
 Zumo32U4Motors motors;
 Zumo32U4LineSensors lineSensors;
+Zumo32U4ProximitySensors proxSensors;
 
-int bounceCount = 0;
 
 #define NUM_SENSORS 5
 unsigned int lineSensorValues[NUM_SENSORS];
@@ -66,7 +72,7 @@ void waitForButtonAndCountDown()
   delay(500);
 }
 
-bool ReadSensor(sensors s){
+bool ReadLineSensor(sensors s){
   lineSensors.read(lineSensorValues);
   if (lineSensorValues[s] > QTR_THRESHOLD){
     return true;
@@ -75,11 +81,23 @@ bool ReadSensor(sensors s){
   }
 }
 
+bool ReadProxSensor(sensors s){
+  proxSensors.read();
+  if (s == Left){
+    return proxSensors.countsFrontWithLeftLeds() >= 2;
+  }
+  else if(s == Right){
+    return proxSensors.countsFrontWithRightLeds() >= 2;
+  }
+}
+
 void TurnAround(){
       motors.setSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
       delay(REVERSE_DURATION);
       motors.setSpeeds(-TURN_SPEED * 2, TURN_SPEED * 2);
       delay(TURN_DURATION * 5);
+      movementIndex++;
+      movements[movementIndex] = 'U';
 }
 
 void TurnRight(int durationMultiplier = 1){
@@ -88,6 +106,8 @@ void TurnRight(int durationMultiplier = 1){
       motors.setSpeeds(TURN_SPEED, -TURN_SPEED);
       delay(TURN_DURATION);
       motors.setSpeeds(FORWARD_SPEED, FORWARD_SPEED);
+      movementIndex++;
+      movements[movementIndex] = 'R';
 }
 
 void TurnLeft(int durationMultiplier = 1){
@@ -96,6 +116,8 @@ void TurnLeft(int durationMultiplier = 1){
       motors.setSpeeds(TURN_SPEED, -TURN_SPEED);
       delay(TURN_DURATION * durationMultiplier);
       motors.setSpeeds(FORWARD_SPEED, FORWARD_SPEED);
+      movementIndex++;
+      movements[movementIndex] = 'L';
 }
 
 void LongTurnLeft(){
@@ -103,6 +125,9 @@ void LongTurnLeft(){
       motors.setSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
       delay(REVERSE_DURATION * 2);
       motors.setSpeeds(-TURN_SPEED * 4, TURN_SPEED * 4);
+      movementIndex += 2;
+      movements[movementIndex] = 'L';
+      movements[movementIndex - 1] = 'L';
 }
 
 void LongTurnRight(){
@@ -110,8 +135,14 @@ void LongTurnRight(){
       motors.setSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
       delay(REVERSE_DURATION * 2);
       motors.setSpeeds(TURN_SPEED * 4, -TURN_SPEED * 4);
+      movementIndex += 2;
+      movements[movementIndex] = 'R';
+      movements[movementIndex - 1] = 'R';
 }
 
+void MoveForwards(){
+      motors.setSpeeds(FORWARD_SPEED, FORWARD_SPEED);
+}
 
 
 void setup()
@@ -126,7 +157,6 @@ void setup()
   lineSensors.initFiveSensors();
   proxSensors.initThreeSensors();
 
-
   waitForButtonAndCountDown();
 }
 
@@ -134,8 +164,6 @@ void setup()
 
 void loop()
 {
-
-
   // Wait for start instruction
   if (buttonA.isPressed())
   {
@@ -146,54 +174,93 @@ void loop()
     waitForButtonAndCountDown();
   }
 
-  if (ReadSensor(Left) && ReadSensor(Right)){
+  if (status == Searching){
+    if (ReadProxSensor(Left) && ReadProxSensor(Right)){
       TurnAround();
-      wallBounceCount = 0;
-  }
-  else if (ReadSensor(Left))
-  {
-    wallBounceCount++;
-    isStuck = wallBounceCount >= 5 ? true : false;
-
-    if (isStuck){
-        LongTurnRight();
+      return;
     }
-
-    if (!isStuck){
+    else if (ReadProxSensor(Left))
+    {
       TurnRight();
+      return;
     }
-    else
-    {
-      TurnRight(4);
-      wallBounceCount = 0;
-
-    }
-  }
-  else if (ReadSensor(Right))
-  { 
-    wallBounceCount++;
-    isStuck = wallBounceCount >= 5 ? true : false;
-
-    if (isStuck){
-        LongTurnLeft();
-    }
-
-    // If rightmost sensor detects line, reverse and turn to the
-    // left.
-    if (!isStuck){
+    else if (ReadProxSensor(Right)){
       TurnLeft();
+      return;
+    }
+    
+    if (ReadLineSensor(Left) && ReadLineSensor(Right)){
+        TurnAround();
+        wallBounceCount = 0;
+    }
+    else if (ReadLineSensor(Left))
+    {
+      wallBounceCount++;
+      isStuck = wallBounceCount >= 5 ? true : false;
+
+      if (isStuck){
+          LongTurnRight();
+      }
+
+      if (!isStuck){
+        TurnRight();
+      }
+      else
+      {
+        TurnRight(4);
+        wallBounceCount = 0;
+
+      }
+    }
+    else if (ReadLineSensor(Right))
+    { 
+      wallBounceCount++;
+      isStuck = wallBounceCount >= 5 ? true : false;
+
+      if (isStuck){
+          LongTurnLeft();
+      }
+
+      // If rightmost sensor detects line, reverse and turn to the
+      // left.
+      if (!isStuck){
+        TurnLeft();
+      }
+      else
+      {
+        TurnLeft(4);
+        wallBounceCount = 0;
+      }
+
     }
     else
     {
-      TurnLeft(4);
-      wallBounceCount = 0;
+      // Otherwise, go straight.
+      MoveForwards();
     }
-
   }
   else
   {
-    // Otherwise, go straight.
-    motors.setSpeeds(FORWARD_SPEED, FORWARD_SPEED);
+    for (int i = sizeof(movements) - 1; i >= 0; i--){
+      char movement = movements[i];
+
+      switch (movement){
+        case 'L':
+          TurnRight();
+          break;
+        case 'R':
+          TurnLeft();
+          break;
+        case 'U':
+          TurnAround();
+          break;
+        case 'F':
+          TurnAround();
+          break;
+        default:
+          return;
+      }
+    }
   }
 }
 
