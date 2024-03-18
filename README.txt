@@ -1,7 +1,8 @@
 *NOTE* The code was tested on a zumo robot without front blade and
 has issues working on other zumo robots. This was discussed with module team
 and is fine, as I will demonstrate with the same zumo.
-Zumo # 32
+
+Zumo # ZU_32
 
 INSTRUCTIONS FOR SETUP:
 1. Open Arduino IDE.
