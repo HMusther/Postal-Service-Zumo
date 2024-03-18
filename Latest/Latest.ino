@@ -5,61 +5,42 @@ backs up and turns. */
 #include <Wire.h>
 #include <Zumo32U4.h>
 
-// This might need to be tuned for different lighting conditions,
-// surfaces, etc.
-#define QTR_THRESHOLD     1000  // microseconds
-
-// These might need to be tuned for different motor types.
-#define REVERSE_SPEED     100  // 0 is stopped, 400 is full speed
-#define TURN_SPEED        100
-#define FORWARD_SPEED     100
-#define REVERSE_DURATION  200  // ms
-#define TURN_DURATION     300  // ms
-
-enum Status {
-  Searching = 0,
-  Returning = 1
-};
-enum sensors {
-  Left = 0,
-  Right = 4
-};
-
-// Storing L (Left) F (Forward) R (Right) U (Turn Around)
-char movements[1000];
-int movementIndex = 0;
-
-int wallBounceCount = 0;
-int bounceCount = 0;
-
-bool isStuck = false;
-Status status = Searching;
-
-// Change next line to this if you are using the older Zumo 32U4
-// with a black and green LCD display:
-// Zumo32U4LCD display;
+// Zumo32U4 Components
 Zumo32U4OLED display;
-
 Zumo32U4ButtonA buttonA;
 Zumo32U4Buzzer buzzer;
 Zumo32U4Motors motors;
 Zumo32U4LineSensors lineSensors;
 Zumo32U4ProximitySensors proxSensors;
 
-
+// #### Constants ####
+// Threshold for line sensors. Lower the number the more sensitive the sensors will be.
+#define QTR_THRESHOLD     800  // microseconds
+#define REVERSE_SPEED     100  
+#define TURN_SPEED        250
+#define FORWARD_SPEED     50
+#define REVERSE_DURATION  200 
+#define TURN_DURATION     50
 #define NUM_SENSORS 5
+// ####
+
+// enum assigning index in lineSensorValues
+enum sensors {
+  Left = 0,
+  MiddleLeft = 1,
+  MiddleRight = 3,
+  Right = 4
+};
+
+// Line sensor values
 unsigned int lineSensorValues[NUM_SENSORS];
 
+// Wait for input from user to start.
 void waitForButtonAndCountDown()
 {
-  ledYellow(1);
-  display.clear();
-  display.print(F("Press A"));
-
   buttonA.waitForButton();
 
   ledYellow(0);
-  display.clear();
 
   // Play audible countdown.
   for (int i = 0; i < 1; i++)
@@ -72,33 +53,20 @@ void waitForButtonAndCountDown()
   delay(500);
 }
 
+// Method to read sensors.
 bool ReadLineSensor(sensors s){
   lineSensors.read(lineSensorValues);
+  
   if (lineSensorValues[s] > QTR_THRESHOLD){
     return true;
-  }else{
+  }
+  else
+  {
     return false;
   }
 }
 
-bool ReadProxSensor(sensors s){
-  proxSensors.read();
-  if (s == Left){
-    return proxSensors.countsFrontWithLeftLeds() >= 2;
-  }
-  else if(s == Right){
-    return proxSensors.countsFrontWithRightLeds() >= 2;
-  }
-}
-
-void TurnAround(){
-      motors.setSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
-      delay(REVERSE_DURATION);
-      motors.setSpeeds(-TURN_SPEED * 2, TURN_SPEED * 2);
-      delay(TURN_DURATION * 5);
-      movementIndex++;
-      movements[movementIndex] = 'U';
-}
+// Manouver: Turn Zumo right.
 
 void TurnRight(int durationMultiplier = 1){
       motors.setSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
@@ -106,9 +74,10 @@ void TurnRight(int durationMultiplier = 1){
       motors.setSpeeds(TURN_SPEED, -TURN_SPEED);
       delay(TURN_DURATION);
       motors.setSpeeds(FORWARD_SPEED, FORWARD_SPEED);
-      movementIndex++;
-      movements[movementIndex] = 'R';
+
 }
+
+// Manouver: Turn Zumo left.
 
 void TurnLeft(int durationMultiplier = 1){
       motors.setSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
@@ -116,50 +85,93 @@ void TurnLeft(int durationMultiplier = 1){
       motors.setSpeeds(TURN_SPEED, -TURN_SPEED);
       delay(TURN_DURATION * durationMultiplier);
       motors.setSpeeds(FORWARD_SPEED, FORWARD_SPEED);
-      movementIndex++;
-      movements[movementIndex] = 'L';
-}
-
-void LongTurnLeft(){
-      buzzer.playNote(NOTE_G(3), 200, 15);
-      motors.setSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
-      delay(REVERSE_DURATION * 2);
-      motors.setSpeeds(-TURN_SPEED * 4, TURN_SPEED * 4);
-      movementIndex += 2;
-      movements[movementIndex] = 'L';
-      movements[movementIndex - 1] = 'L';
-}
-
-void LongTurnRight(){
-      buzzer.playNote(NOTE_G(3), 200, 15);
-      motors.setSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
-      delay(REVERSE_DURATION * 2);
-      motors.setSpeeds(TURN_SPEED * 4, -TURN_SPEED * 4);
-      movementIndex += 2;
-      movements[movementIndex] = 'R';
-      movements[movementIndex - 1] = 'R';
-}
-
-void MoveForwards(){
-      motors.setSpeeds(FORWARD_SPEED, FORWARD_SPEED);
 }
 
 
+// Move the zumo in the opposite direction of the line. 
+// Breaks once the sensors do not detect the line.
+void TurnUntilSensorFalse(sensors s1, sensors s2){
+
+  while (ReadLineSensor(s1) || ReadLineSensor(s2)){
+      if (s1 == Left){
+          motors.setLeftSpeed(TURN_SPEED);
+          motors.setRightSpeed(-TURN_SPEED);
+      }
+      else
+      {
+        motors.setLeftSpeed(-TURN_SPEED);
+        motors.setRightSpeed(TURN_SPEED);
+      }
+  }
+
+  motors.setSpeeds(FORWARD_SPEED, FORWARD_SPEED);
+}
+
+
+// Determine the manouver/action to take based on the line readings.
+void RecalculateDirection(){
+  bool leftSensor = ReadLineSensor(Left);
+  bool middleLeftSensor = ReadLineSensor(MiddleLeft);
+  bool middleRightSensor = ReadLineSensor(MiddleRight);
+  bool rightSensor = ReadLineSensor(Right);
+
+  // Happens when hitting line at 90 degree angle.
+  // Turn left to avoid this.
+  if (leftSensor && rightSensor){
+    TurnLeft();
+    TurnLeft();
+  }
+  // Track on the right side is over line. Turn towards left to get back on track.
+  else if (middleRightSensor && !rightSensor){
+    TurnUntilSensorFalse(Right, MiddleRight);
+  }
+  // Track on the left side is over the line. Turn towards right to get back on track.
+  else if (middleLeftSensor && !leftSensor){
+    TurnUntilSensorFalse(Left, MiddleLeft);
+  }
+  // Left side sensors detect line, move towards right.
+  else if ((leftSensor || middleLeftSensor) && !rightSensor){
+      TurnUntilSensorFalse(Left, MiddleLeft);
+  }
+  // Right side sensors detct line, move towards left.
+  else if (!leftSensor && (rightSensor || middleRightSensor)){
+      TurnUntilSensorFalse(Right, MiddleRight);
+  }
+  // Previous cases not true, Move to the left to allow for correction in next call.
+  else if (leftSensor || rightSensor || middleLeftSensor || middleRightSensor){
+    TurnUntilSensorFalse(Left, MiddleLeft);
+  }
+  // Move forwards, no lines have been detected.
+  else{
+    motors.setSpeeds(FORWARD_SPEED, FORWARD_SPEED);
+  }
+
+}
+
+// Scan for objects in front of the zumo using proximity sensors.
+// 
+void ScanForObject(){
+
+  proxSensors.read();
+
+  if (proxSensors.countsFrontWithLeftLeds() >= 6 || proxSensors.countsFrontWithRightLeds() >= 6)
+  {
+    motors.setSpeeds(0,0);
+    buzzer.playNote(NOTE_G(4), 500, 15);
+    delay(2000);
+  }
+}
+
+// Initialise sensors and wait for input.
 void setup()
 {
-  // Uncomment if necessary to correct motor directions:
-  //motors.flipLeftMotor(true);
-  //motors.flipRightMotor(true);
-
-  display.clear();
-  display.gotoXY(0, 0);
-
   lineSensors.initFiveSensors();
   proxSensors.initThreeSensors();
+  proxSensors.setPeriod(15);
 
   waitForButtonAndCountDown();
-}
 
+}
 
 
 void loop()
@@ -174,94 +186,12 @@ void loop()
     waitForButtonAndCountDown();
   }
 
-  if (status == Searching){
-    // if (ReadProxSensor(Left) && ReadProxSensor(Right)){
-    //   TurnAround();
-    //   return;
-    // }
-    // else if (ReadProxSensor(Left))
-    // {
-    //   TurnRight();
-    //   return;
-    // }
-    // else if (ReadProxSensor(Right)){
-    //   TurnLeft();
-    //   return;
-    // }
-    
-    if (ReadLineSensor(Left) && ReadLineSensor(Right)){
-        TurnAround();
-        wallBounceCount = 0;
-    }
-    else if (ReadLineSensor(Left))
-    {
-      wallBounceCount++;
-      isStuck = wallBounceCount >= 5 ? true : false;
+  // Scan for object (house) before moving.
+  ScanForObject();
 
-      if (isStuck){
-          LongTurnRight();
-      }
+  // Determine next action for zumo.
+  RecalculateDirection();
 
-      if (!isStuck){
-        TurnRight();
-      }
-      else
-      {
-        TurnRight(4);
-        wallBounceCount = 0;
-
-      }
-    }
-    else if (ReadLineSensor(Right))
-    { 
-      wallBounceCount++;
-      isStuck = wallBounceCount >= 5 ? true : false;
-
-      if (isStuck){
-          LongTurnLeft();
-      }
-
-      // If rightmost sensor detects line, reverse and turn to the
-      // left.
-      if (!isStuck){
-        TurnLeft();
-      }
-      else
-      {
-        TurnLeft(4);
-        wallBounceCount = 0;
-      }
-
-    }
-    else
-    {
-      // Otherwise, go straight.
-      MoveForwards();
-    }
-  }
-  else
-  {
-    for (int i = sizeof(movements) - 1; i >= 0; i--){
-      char movement = movements[i];
-
-      switch (movement){
-        case 'L':
-          TurnRight();
-          break;
-        case 'R':
-          TurnLeft();
-          break;
-        case 'U':
-          TurnAround();
-          break;
-        case 'F':
-          TurnAround();
-          break;
-        default:
-          return;
-      }
-    }
-  }
 }
 
 
