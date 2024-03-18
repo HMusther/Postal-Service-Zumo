@@ -16,3 +16,7 @@ USAGE:
 
 Upon detecting an object, the zumo will sound a noise, and briefly pause until the object is gone.
 The zumo will then continue to navigate the maze.
+
+REFERENCES:
+https://github.com/pololu/zumo-32u4-arduino-library/blob/master/examples/BorderDetect/BorderDetect.ino
+https://github.com/pololu/zumo-32u4-arduino-library/blob/master/examples/LineAndProximitySensors/LineAndProximitySensors.ino

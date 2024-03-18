@@ -1,7 +1,3 @@
-/** This example uses the Zumo's line sensors to detect the white
-border around a sumo ring.  When the border is detected, it
-backs up and turns. */
-
 #include <Wire.h>
 #include <Zumo32U4.h>
 
@@ -15,12 +11,12 @@ Zumo32U4ProximitySensors proxSensors;
 
 // #### Constants ####
 // Threshold for line sensors. Lower the number the more sensitive the sensors will be.
-#define QTR_THRESHOLD     800  // microseconds
+#define QTR_THRESHOLD     800 // ms
 #define REVERSE_SPEED     100  
 #define TURN_SPEED        250
 #define FORWARD_SPEED     50
-#define REVERSE_DURATION  200 
-#define TURN_DURATION     50
+#define REVERSE_DURATION  200 // ms
+#define TURN_DURATION     50  // ms
 #define NUM_SENSORS 5
 // ####
 
