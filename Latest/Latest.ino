@@ -175,19 +175,19 @@ void loop()
   }
 
   if (status == Searching){
-    if (ReadProxSensor(Left) && ReadProxSensor(Right)){
-      TurnAround();
-      return;
-    }
-    else if (ReadProxSensor(Left))
-    {
-      TurnRight();
-      return;
-    }
-    else if (ReadProxSensor(Right)){
-      TurnLeft();
-      return;
-    }
+    // if (ReadProxSensor(Left) && ReadProxSensor(Right)){
+    //   TurnAround();
+    //   return;
+    // }
+    // else if (ReadProxSensor(Left))
+    // {
+    //   TurnRight();
+    //   return;
+    // }
+    // else if (ReadProxSensor(Right)){
+    //   TurnLeft();
+    //   return;
+    // }
     
     if (ReadLineSensor(Left) && ReadLineSensor(Right)){
         TurnAround();
