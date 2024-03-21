@@ -39,27 +39,19 @@ void waitForButtonAndCountDown()
   ledYellow(0);
 
   // Play audible countdown.
-  for (int i = 0; i < 1; i++)
+  for (int i = 0; i < 2; i++)
   {
-    delay(500);
     buzzer.playNote(NOTE_G(3), 200, 15);
+    delay(500);
   }
   delay(500);
   buzzer.playNote(NOTE_G(4), 500, 15);
-  delay(500);
 }
 
 // Method to read sensors.
 bool ReadLineSensor(sensors s){
   lineSensors.read(lineSensorValues);
-  
-  if (lineSensorValues[s] > QTR_THRESHOLD){
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  return lineSensorValues[s] > QTR_THRESHOLD;
 }
 
 // Manouver: Turn Zumo right.
